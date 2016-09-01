@@ -199,8 +199,10 @@ goog.events.EventTarget.prototype.dispatchEvent = function(e) {
           'infinite loop');
     }
   }
+   var actualTarget = this.actualEventTarget_;
+   var eventTarget = this.alwaysFireLocal_ ? this : actualTarget;
    return goog.events.EventTarget.dispatchEventInternal_(
-      this.actualEventTarget_, e, ancestorsTree, this.alwaysFireLocal_ ? this : null);
+      actualTarget, eventTarget, e, ancestorsTree);
 };
 
 
@@ -326,7 +328,7 @@ goog.events.EventTarget.prototype.hasListener = function(
  */
 goog.events.EventTarget.prototype.setTargetForTesting = function(target, opt_external) {
   this.actualEventTarget_ = target;
-  if (opt_external) this.alwaysFireLocal_ = opt_external;
+  this.alwaysFireLocal_ = !!opt_external;
 };
 
 
@@ -345,19 +347,19 @@ goog.events.EventTarget.prototype.assertInitialized_ = function() {
 /**
  * Dispatches the given event on the ancestorsTree.
  *
- * @param {!Object} target The target to dispatch on.
+ * @param {!Object} target The target for the event.
+ * @param {!Object} eventTarget The target to dispatch on.
+ *     support for separating target and eventTarget permits proxy implementations
  * @param {goog.events.Event|Object|string} e The event object.
  * @param {Array<goog.events.Listenable>=} opt_ancestorsTree The ancestors
  *     tree of the target, in reverse order from the closest ancestor
  *     to the root event target. May be null if the target has no ancestor.
- * @param {goog.events.EventTarget=} optional EventTarget instance to 
- *     support proxy dispatching for a target that does not implement EventTarget interface
  * @return {boolean} If anyone called preventDefault on the event object (or
  *     if any of the listeners returns false) this will also return false.
  * @private
  */
 goog.events.EventTarget.dispatchEventInternal_ = function(
-    target, e, opt_ancestorsTree, opt_dispatcher) {
+    target, eventTarget, e, opt_ancestorsTree, opt_dispatcher) {
   var type = e.type || /** @type {string} */ (e);
 
   // If accepting a string or object, create a custom event object so that
@@ -385,8 +387,8 @@ goog.events.EventTarget.dispatchEventInternal_ = function(
 
   // Executes capture and bubble listeners on the target.
   if (!e.propagationStopped_) {
-    currentTarget = /** @type {?} */ (e.currentTarget = target);
-	if (opt_dispatcher) currentTarget = opt_dispatcher; 
+	  e.currentTarget = target;
+	  currentTarget /** @type {?} */ = eventTarget;
     rv = currentTarget.fireListeners(type, true, e) && rv;
     if (!e.propagationStopped_) {
       rv = currentTarget.fireListeners(type, false, e) && rv;
