@@ -81,6 +81,13 @@ goog.events.EventTarget = function() {
    * @private {!Object}
    */
   this.actualEventTarget_ = this;
+  
+  /**
+   * If true, when mixing in, avoid calling fireListeners on
+   * the alternate target, call it on this instance 
+   * @private {boolean}
+   */
+  this.alwaysFireLocal_ = false;
 
   /**
    * Parent event target, used during event bubbling.
@@ -192,9 +199,10 @@ goog.events.EventTarget.prototype.dispatchEvent = function(e) {
           'infinite loop');
     }
   }
-
-  return goog.events.EventTarget.dispatchEventInternal_(
-      this.actualEventTarget_, e, ancestorsTree);
+   var actualTarget = this.actualEventTarget_;
+   var eventTarget = this.alwaysFireLocal_ ? this : actualTarget;
+   return goog.events.EventTarget.dispatchEventInternal_(
+      actualTarget, eventTarget, e, ancestorsTree);
 };
 
 
@@ -316,9 +324,11 @@ goog.events.EventTarget.prototype.hasListener = function(
  * event. Mainly used for testing. For example, see
  * {@code goog.testing.events.mixinListenable}.
  * @param {!Object} target The target.
+ * @param {boolean=} use an external target only (fireListeners is called on this EventTarget).
  */
-goog.events.EventTarget.prototype.setTargetForTesting = function(target) {
+goog.events.EventTarget.prototype.setTargetForTesting = function(target, opt_external) {
   this.actualEventTarget_ = target;
+  this.alwaysFireLocal_ = !!opt_external;
 };
 
 
@@ -337,7 +347,9 @@ goog.events.EventTarget.prototype.assertInitialized_ = function() {
 /**
  * Dispatches the given event on the ancestorsTree.
  *
- * @param {!Object} target The target to dispatch on.
+ * @param {!Object} target The target for the event.
+ * @param {!Object} eventTarget The target to dispatch on.
+ *     support for separating target and eventTarget permits proxy implementations
  * @param {goog.events.Event|Object|string} e The event object.
  * @param {Array<goog.events.Listenable>=} opt_ancestorsTree The ancestors
  *     tree of the target, in reverse order from the closest ancestor
@@ -347,7 +359,7 @@ goog.events.EventTarget.prototype.assertInitialized_ = function() {
  * @private
  */
 goog.events.EventTarget.dispatchEventInternal_ = function(
-    target, e, opt_ancestorsTree) {
+    target, eventTarget, e, opt_ancestorsTree, opt_dispatcher) {
   var type = e.type || /** @type {string} */ (e);
 
   // If accepting a string or object, create a custom event object so that
@@ -375,7 +387,8 @@ goog.events.EventTarget.dispatchEventInternal_ = function(
 
   // Executes capture and bubble listeners on the target.
   if (!e.propagationStopped_) {
-    currentTarget = /** @type {?} */ (e.currentTarget = target);
+	  e.currentTarget = target;
+	  currentTarget /** @type {?} */ = eventTarget;
     rv = currentTarget.fireListeners(type, true, e) && rv;
     if (!e.propagationStopped_) {
       rv = currentTarget.fireListeners(type, false, e) && rv;
